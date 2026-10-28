@@ -17,4 +17,4 @@ test:
 	uv run pytest -q
 
 clean:
-	rm -rf data/silver data/painel
+	rm -rf data/silver

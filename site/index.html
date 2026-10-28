@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ritmo do Clima</title>
+<meta name="description" content="Temperatura hora a hora das estações automáticas do INMET desde 2015: quanto dos dados é usável, e o ciclo do dia e do ano de cada estação.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Fraunces:ital,opsz,wght@1,9..144,500&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* cores do README de perfil (LuissFellipe/LuissFellipe, profile/gerar_svgs.py, TEMAS) */
+:root {
+  color-scheme: light;
+  --page: #F7F4FC; --grade: #E9E3F3; --border: #E2DAEF; --surface-1: #FFFFFF; --chip: #EEE8F7;
+  --text-primary: #1E1828; --text-secondary: #5F5672; --text-muted: #6E6582;
+  --roxo: #5B4282; --roxo-txt: #4B3470; --laranja: #E2620E; --laranja-txt: #B84E08;
+  --axis: #CFC5E0; --grid: #EEE8F7; --sombra-cartao: rgba(30, 24, 40, 0.14);
+  --s-ok: #5B4282; --s-interp: #A08BC9; --s-dup: #D9CFEA; --s-susp: #F4B27F; --s-falta: #E2620E; --s-total: #DCD3EA;
+  --focus: #E2620E;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #17121F; --grade: #231C2E; --border: #2F2640; --surface-1: #211A2C; --chip: #2A2238;
+    --text-primary: #F3EFFA; --text-secondary: #ABA1BE; --text-muted: #9A90AE;
+    --roxo: #7B5CB0; --roxo-txt: #BDA4EC; --laranja: #FF8A3D; --laranja-txt: #FF9E5E;
+    --axis: #4A3E5E; --grid: #2A2238; --sombra-cartao: rgba(0, 0, 0, 0.55);
+    --s-ok: #9C7FD6; --s-interp: #6A5592; --s-dup: #3F3454; --s-susp: #B9703F; --s-falta: #FF8A3D; --s-total: #3A3050;
+    --focus: #FF8A3D;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #17121F; --grade: #231C2E; --border: #2F2640; --surface-1: #211A2C; --chip: #2A2238;
+  --text-primary: #F3EFFA; --text-secondary: #ABA1BE; --text-muted: #9A90AE;
+  --roxo: #7B5CB0; --roxo-txt: #BDA4EC; --laranja: #FF8A3D; --laranja-txt: #FF9E5E;
+  --axis: #4A3E5E; --grid: #2A2238; --sombra-cartao: rgba(0, 0, 0, 0.55);
+  --s-ok: #9C7FD6; --s-interp: #6A5592; --s-dup: #3F3454; --s-susp: #B9703F; --s-falta: #FF8A3D; --s-total: #3A3050;
+  --focus: #FF8A3D;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; color: var(--text-primary); background-color: var(--page);
+  background-image: linear-gradient(var(--grade) 1px, transparent 1px), linear-gradient(90deg, var(--grade) 1px, transparent 1px);
+  background-size: 24px 24px;
+  font: 16.5px/1.6 "IBM Plex Sans", system-ui, sans-serif;
+}
+main { max-width: 1480px; margin: 0 auto; padding: 32px 24px 64px; }
+@media (max-width: 600px) { main { padding: 24px 12px 48px; } }
+h1, h2 { font-family: "Bricolage Grotesque", system-ui, sans-serif; font-weight: 800; letter-spacing: -0.025em; text-wrap: balance; }
+h1 { font-size: clamp(48px, 7vw, 84px); line-height: .92; margin: 0 0 18px; }
+h1 em { font: italic 500 clamp(44px, 6.4vw, 76px)/1.05 "Fraunces", Georgia, serif; letter-spacing: 0; color: var(--roxo-txt); }
+h2 { font-size: clamp(26px, 2.4vw, 34px); line-height: 1.05; margin: 0 0 10px; }
+p { margin: 0 0 12px; }
+a { color: var(--roxo-txt); }
+.kicker, .filtro-rot, .cartao .k, .chip {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 500;
+}
+.kicker { color: var(--laranja-txt); font-size: 13px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .08em; }
+.lede { color: var(--text-secondary); max-width: 680px; font-size: 18px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.chip { background: var(--chip); color: var(--text-secondary); border-radius: 999px; padding: 5px 12px; font-size: 12px; }
+.chip b { color: var(--text-primary); font-weight: 500; }
+
+/* topo: texto à esquerda, dois cartões inclinados à direita, como no cabeçalho do perfil */
+.hero {
+  display: grid; grid-template-columns: 1.35fr 1fr; gap: 24px; align-items: center;
+  border: 1px solid var(--border); border-radius: 18px; padding: 32px 40px;
+  background-color: var(--page); background-image: inherit; background-size: 24px 24px;
+}
+.cartoes { display: grid; gap: 18px; padding: 8px 12px 8px 0; max-width: 500px; justify-self: end; width: 100%; }
+.cartao {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 16px 20px;
+  box-shadow: 6px 7px 0 var(--sombra-cartao); transform: rotate(-3deg); min-width: 0;
+}
+.cartao.destaque { background: #5B4282; border-color: #5B4282; color: #fff; transform: rotate(2deg) translateX(18px); box-shadow: 6px 7px 0 #2E2145; }
+.cartao .k { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-secondary); }
+.cartao.destaque .k, .cartao.destaque .d { color: rgba(255, 255, 255, .82); }
+.cartao .n { font: 600 26px/1.15 "Bricolage Grotesque", sans-serif; letter-spacing: -0.01em; margin: 4px 0 2px; overflow-wrap: anywhere; }
+.cartao .d { font: 500 12px "IBM Plex Mono", monospace; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.cartao .pct { font: 800 44px/1 "Bricolage Grotesque", sans-serif; margin: 6px 0 6px; font-variant-numeric: tabular-nums; }
+.escolha { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.filtro-rot { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); }
+select, input[type=search] {
+  font: 15px "IBM Plex Sans", system-ui, sans-serif; color: var(--text-primary); background-color: var(--surface-1);
+  border: 1.5px solid var(--axis); border-radius: 10px; padding: 8px 12px; width: 100%; max-width: 100%;
+}
+/* a lista aberta é desenhada pelo sistema: sem cor explícita ela herda texto claro em fundo branco */
+select option, select optgroup { background-color: var(--surface-1); color: var(--text-primary); }
+select:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; padding: 28px 20px; }
+  .cartoes { padding: 4px 0 8px; justify-self: stretch; max-width: none; }
+  .cartao, .cartao.destaque { transform: none; }
+}
+
+.dash { display: grid; gap: 24px; margin-top: 24px; align-items: stretch; }
+.d1 { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+.d2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.pilha { display: grid; gap: 24px; align-content: start; }
+@media (max-width: 1100px) { .d1, .d2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; padding: 28px; min-width: 0; }
+.card > .sub { color: var(--text-secondary); margin-bottom: 16px; max-width: 720px; }
+.full { margin-top: 24px; }
+@media (max-width: 600px) { .card { padding: 22px 16px; } }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; color: var(--text-secondary); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; }
+svg text { fill: var(--text-secondary); font: 13px "IBM Plex Sans", system-ui, sans-serif; }
+svg .ax { fill: var(--text-muted); font: 12px "IBM Plex Mono", monospace; }
+svg .rot { fill: var(--text-primary); font: 600 13px "IBM Plex Mono", monospace; paint-order: stroke; stroke: var(--surface-1); stroke-width: 4px; }
+.ponto { cursor: pointer; }
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 12px; font-size: 13px; box-shadow: 4px 5px 0 var(--axis); max-width: 280px;
+  font-variant-numeric: tabular-nums;
+}
+#tip strong { font: 800 18px "Bricolage Grotesque", sans-serif; display: block; }
+#tip .k { color: var(--text-secondary); }
+
+.busca { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
+.busca input { max-width: 420px; }
+.busca output { font: 500 12px "IBM Plex Mono", monospace; color: var(--text-muted); }
+.tabela { max-height: 460px; overflow: auto; border-top: 1px solid var(--grid); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--grid); text-align: left; vertical-align: top; }
+th { position: sticky; top: 0; background: var(--surface-1); padding: 0; z-index: 1; }
+th button {
+  font: 500 11px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .08em; color: var(--text-secondary);
+  background: none; border: 0; padding: 10px; width: 100%; text-align: inherit; cursor: pointer;
+}
+th[aria-sort="ascending"] button::after { content: " ↑"; color: var(--laranja-txt); }
+th[aria-sort="descending"] button::after { content: " ↓"; color: var(--laranja-txt); }
+.num { text-align: right; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--chip); }
+tbody tr.sel td { background: var(--chip); font-weight: 600; }
+td.aviso { color: var(--text-secondary); font-size: 13px; }
+@media (max-width: 640px) { .estreito-some { display: none; } }
+
+.achados { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px 32px; margin: 8px 0 0; padding: 0; list-style: none; }
+.achados li { border-top: 1px solid var(--border); padding-top: 12px; color: var(--text-secondary); font-size: 15.5px; }
+.achados li b { display: block; color: var(--text-primary); font: 700 18px/1.25 "Bricolage Grotesque", sans-serif; margin-bottom: 4px; }
+code { font: 500 0.88em "IBM Plex Mono", monospace; background: var(--chip); border-radius: 6px; padding: 1px 5px; }
+footer { color: var(--text-muted); font-size: 14px; margin-top: 32px; }
+.erro { color: var(--laranja-txt); font: 500 14px "IBM Plex Mono", monospace; }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div>
+      <p class="kicker">INMET · estações automáticas · 2015 a 2026</p>
+      <h1>Ritmo do <em>Clima</em></h1>
+      <p class="lede">A temperatura de cada estação automática do INMET, hora a hora, desde 2015. Antes de procurar o ritmo do clima, é preciso saber quanto dos dados é confiável. Depois, cada estação mostra seus dois ciclos: o do dia e o do ano.</p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="cartoes" aria-live="polite">
+      <div class="cartao">
+        <div class="k">Estação</div>
+        <div class="n" id="c-nome">—</div>
+        <div class="d" id="c-info"></div>
+        <label class="escolha"><span class="filtro-rot">Escolher estação</span>
+          <select id="sel-estacao" aria-label="Estação"></select>
+        </label>
+      </div>
+      <div class="cartao destaque">
+        <div class="k">Amplitude do ciclo diário</div>
+        <div class="pct" id="c-amp-dia">—</div>
+        <div class="d" id="c-amp-ano"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash d1">
+    <section class="card" aria-labelledby="t-dia">
+      <p class="kicker">Ciclo de 24 horas</p>
+      <h2 id="t-dia">O dia de uma estação</h2>
+      <div class="sub">Temperatura média em cada hora, somando todos os anos com dados. A hora está em UTC, como o INMET publica; em Brasília, são 3 horas a menos.</div>
+      <div class="chart" id="g-dia"></div>
+    </section>
+    <section class="card" aria-labelledby="t-ano">
+      <p class="kicker">Ciclo de 12 meses</p>
+      <h2 id="t-ano">O ano da mesma estação</h2>
+      <div class="sub">Temperatura média em cada mês. Perto do equador, o ciclo do dia é maior que o do ano; no Sul, os dois se aproximam.</div>
+      <div class="chart" id="g-ano"></div>
+    </section>
+  </div>
+
+  <div class="dash d2">
+    <section class="card" aria-labelledby="t-mapa">
+      <p class="kicker">Onde ficam</p>
+      <h2 id="t-mapa">As estações no mapa</h2>
+      <div class="sub">Cada ponto é uma estação, na última coordenada cadastrada. A cor diz se ela tem, em média, 80% das horas usáveis. Clique num ponto para ver o dia e o ano dela.</div>
+      <div class="chart" id="g-mapa"></div>
+      <div class="legend">
+        <span><i class="sw" style="background: var(--s-ok)"></i>80% das horas ou mais</span>
+        <span><i class="sw" style="background: var(--s-falta)"></i>Abaixo de 80%</span>
+      </div>
+    </section>
+    <div class="pilha">
+      <section class="card" aria-labelledby="t-aprov">
+        <p class="kicker">Cobertura</p>
+        <h2 id="t-aprov">Estações aprovadas por ano</h2>
+        <div class="sub" id="sub-aprov">Uma estação é aprovada no ano quando tem pelo menos 80% das horas usáveis. Só as aprovadas seguem para a análise de Fourier.</div>
+        <div class="chart" id="g-aprov"></div>
+        <div class="legend">
+          <span><i class="sw" style="background: var(--s-total)"></i>Estações com dados</span>
+          <span><i class="sw" style="background: var(--s-ok)"></i>Aprovadas</span>
+          <span>2026* vai até 30/09</span>
+        </div>
+      </section>
+      <section class="card" aria-labelledby="t-status">
+        <p class="kicker">Qualidade</p>
+        <h2 id="t-status">O que é cada hora</h2>
+        <div class="sub">Status da temperatura em cada hora da grade, em % das horas do ano.</div>
+        <div class="chart" id="g-status"></div>
+        <div class="legend">
+          <span><i class="sw" style="background: var(--s-ok)"></i>Medida</span>
+          <span><i class="sw" style="background: var(--s-interp)"></i>Interpolada (lacuna de até 3 h)</span>
+          <span><i class="sw" style="background: var(--s-dup)"></i>Duplicada</span>
+          <span><i class="sw" style="background: var(--s-susp)"></i>Suspeita (6 h iguais)</span>
+          <span><i class="sw" style="background: var(--s-falta)"></i>Faltante</span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card full" aria-labelledby="t-cadastro">
+    <p class="kicker">Cadastro</p>
+    <h2 id="t-cadastro">Todas as estações</h2>
+    <div class="sub">Os avisos vêm dos testes de qualidade do pipeline. O mais comum é a coordenada mudar entre um ano e outro. Clique numa linha para ver a estação.</div>
+    <div class="busca">
+      <input type="search" id="busca" placeholder="Buscar por código, nome, UF ou aviso" aria-label="Buscar estação">
+      <output id="busca-n"></output>
+    </div>
+    <div class="tabela">
+      <table>
+        <thead>
+          <tr>
+            <th aria-sort="ascending"><button type="button" data-col="codigo">Código</button></th>
+            <th><button type="button" data-col="nome">Nome</button></th>
+            <th><button type="button" data-col="uf">UF</button></th>
+            <th class="num estreito-some"><button type="button" data-col="anos">Anos</button></th>
+            <th class="num estreito-some"><button type="button" data-col="anos_aprovados">Aprovados</button></th>
+            <th class="num"><button type="button" data-col="cobertura_media">Cobertura</button></th>
+            <th class="estreito-some"><button type="button" data-col="avisos">Avisos</button></th>
+          </tr>
+        </thead>
+        <tbody id="corpo"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card full" aria-labelledby="t-achados">
+    <p class="kicker">Por trás dos números</p>
+    <h2 id="t-achados">O que os dados do INMET escondem</h2>
+    <div class="sub">Cada item apareceu ao rodar o pipeline nos arquivos reais e virou código e teste.</div>
+    <ul class="achados">
+      <li><b>O formato muda em 2019</b>Até 2018, a data vem como <code>2018-01-01</code> e o valor ausente como <code>-9999</code>. A partir de 2019, como <code>2019/01/01</code>, com hora <code>0000 UTC</code> e ausente em branco.</li>
+      <li><b>Uma estação na Antártida</b>A C891 (Criosfera) vem cadastrada como SP, mas fica a 84° S e registra −51 °C. Ela foi excluída, em vez de afrouxar o teste de temperatura.</li>
+      <li><b>O ano corrente vem em dobro</b>O arquivo de 2026 traz cada estação duas vezes, de janeiro a agosto e de janeiro a setembro. Só o retrato mais recente é lido.</li>
+      <li><b>Acentos perdidos na origem</b>Em 2019, os cabeçalhos chegam como <code>REGI?O</code> e <code>ESTAC?O</code>. Uma estação de 2016 tem altitude <code>F</code>.</li>
+      <li><b>2021 foi o ano mais vazio</b>A estação típica tem só 69% das horas em 2021, contra 95% a 99% nos outros anos fechados.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Dados: <a href="https://portal.inmet.gov.br/dadoshistoricos">INMET, dados históricos</a>. Código, testes e método: <a href="https://github.com/LuissFellipe/ritmo-do-clima">github.com/LuissFellipe/ritmo-do-clima</a>. A análise de Fourier de cada estação é o próximo passo do projeto.
+  </footer>
+</main>
+<div id="tip" role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+(async () => {
+const nf = (o) => new Intl.NumberFormat("pt-BR", o);
+const fInt = nf({ maximumFractionDigits: 0 });
+const fPct = nf({ style: "percent", maximumFractionDigits: 1 });
+const fPct0 = nf({ style: "percent", maximumFractionDigits: 0 });
+const fDec = nf({ minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fCompacto = nf({ notation: "compact", maximumFractionDigits: 1 });
+const graus = (v) => `${fDec.format(v)} °C`;
+const vazio = (v) => v === "" || v == null;
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const USAVEL = ["ok", "interpolada", "duplicada"];
+
+// O INMET grava nomes em maiúsculas e sem acento: só ajusta a caixa.
+const MINUSCULAS = new Set(["de", "da", "do", "das", "dos", "e"]);
+const nomeBonito = (s) => s.toLowerCase().replace(/[\p{L}']+/gu, (p, i) => (i && MINUSCULAS.has(p) ? p : p[0].toUpperCase() + p.slice(1)));
+
+let dados;
+try {
+  const [cobertura, status, estacoes, dia, ano] = await Promise.all(
+    ["cobertura_por_ano", "horas_por_status", "estacoes", "ciclo_diario", "ciclo_anual"].map((n) => d3.csv(`data/${n}.csv`))
+  );
+  dados = { cobertura, status, estacoes, dia, ano };
+} catch (e) {
+  document.querySelector("#chips").innerHTML = '<span class="erro">Os dados não carregaram. Recarregue a página.</span>';
+  return;
+}
+
+const estacoes = dados.estacoes.map((r) => ({
+  ...r, lat: +r.lat, lon: +r.lon,
+  altitude: vazio(r.altitude_m) ? null : +r.altitude_m,
+  anos: vazio(r.anos) ? null : +r.anos,
+  anos_aprovados: vazio(r.anos_aprovados) ? null : +r.anos_aprovados,
+  cobertura_media: vazio(r.cobertura_media) ? null : +r.cobertura_media,
+  nomeBonito: nomeBonito(r.nome),
+  avisosTexto: r.avisos.replaceAll("RQ09 ", ""),
+}));
+const porCodigo = new Map(estacoes.map((e) => [e.codigo, e]));
+const comDados = estacoes.filter((e) => e.cobertura_media != null);
+const diaPor = d3.group(dados.dia, (r) => r.codigo);
+const anoPor = d3.group(dados.ano, (r) => r.codigo);
+
+// ---------------------------------------------------------------- tooltip
+const tip = document.querySelector("#tip");
+const mostrarTip = (ev, titulo, linhas) => {
+  tip.replaceChildren();
+  const t = document.createElement("strong");
+  t.textContent = titulo;
+  tip.append(t);
+  linhas.forEach((l) => { const d = document.createElement("div"); d.className = "k"; d.textContent = l; tip.append(d); });
+  tip.style.display = "block";
+  const x = Math.min(ev.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+  const y = ev.clientY - tip.offsetHeight - 12 < 8 ? ev.clientY + 16 : ev.clientY - tip.offsetHeight - 12;
+  tip.style.left = `${Math.max(8, x)}px`;
+  tip.style.top = `${y}px`;
+};
+const esconderTip = () => { tip.style.display = "none"; };
+
+// ---------------------------------------------------------------- ajudas de gráfico
+const medir = (svg, textos, classe = "ax") => {
+  const g = svg.append("g");
+  let w = 0;
+  textos.forEach((t) => { w = Math.max(w, g.append("text").attr("class", classe).text(t).node().getComputedTextLength()); });
+  g.remove();
+  return w;
+};
+
+const quadro = (el, H, dominio, yFmt, nTicks = 5) => {
+  el.replaceChildren();
+  const W = Math.max(300, el.clientWidth);
+  const svg = d3.select(el).append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img");
+  const m = { t: 14, r: 16, b: 30, l: 0 };
+  const y = d3.scaleLinear(dominio, [H - m.b, m.t]);
+  const ticks = y.ticks(nTicks);
+  m.l = Math.ceil(medir(svg, ticks.map(yFmt))) + 12;
+  const g = svg.append("g");
+  ticks.forEach((t) => {
+    g.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(t)).attr("y2", y(t)).style("stroke", "var(--grid)");
+    g.append("text").attr("class", "ax").attr("x", m.l - 10).attr("y", y(t)).attr("dy", "0.32em").attr("text-anchor", "end").text(yFmt(t));
+  });
+  return { svg, W, H, m, y };
+};
+
+const eixoX = (q, valores, xPos, rotulo) => {
+  const largura = medir(q.svg, valores.map(rotulo).filter(Boolean));
+  const passo = valores.length > 1 ? Math.abs(xPos(valores[1]) - xPos(valores[0])) : largura;
+  const pula = Math.max(1, Math.ceil((largura + 10) / passo));
+  const g = q.svg.append("g");
+  g.append("line").attr("x1", q.m.l).attr("x2", q.W - q.m.r).attr("y1", q.H - q.m.b).attr("y2", q.H - q.m.b).style("stroke", "var(--axis)");
+  valores.forEach((v, i) => {
+    if (i % pula || !rotulo(v)) return;
+    g.append("text").attr("class", "ax").attr("x", xPos(v)).attr("y", q.H - q.m.b + 19).attr("text-anchor", "middle").text(rotulo(v));
+  });
+};
+
+// Linha de um ciclo, com área esmaecida e rótulos no máximo e no mínimo.
+let gradientes = 0;
+const ciclo = (el, pontos, xs, rotuloX, tituloTip, rotuloAria) => {
+  if (!pontos.length) { el.replaceChildren(); el.textContent = "Sem dados usáveis para esta estação."; return; }
+  const [lo, hi] = d3.extent(pontos, (p) => p.y);
+  const dominio = d3.scaleLinear().domain([lo - 1.2, hi + 1.2]).nice().domain();
+  const q = quadro(el, 280, dominio, (v) => `${fInt.format(v)}°`);
+  q.svg.attr("aria-label", rotuloAria);
+  const x = d3.scalePoint(xs, [q.m.l + 12, q.W - q.m.r - 12]);
+  const id = `grad-${++gradientes}`;
+  const grad = q.svg.append("defs").append("linearGradient").attr("id", id).attr("x1", 0).attr("x2", 0).attr("y1", 0).attr("y2", 1);
+  [[0, .26], [.25, .16], [.5, .08], [.75, .03], [1, 0]].forEach(([o, a]) => grad.append("stop").attr("offset", o).style("stop-color", "var(--s-ok)").style("stop-opacity", a));
+  q.svg.append("path").datum(pontos).attr("d", d3.area((p) => x(p.x), q.y(dominio[0]), (p) => q.y(p.y))).style("fill", `url(#${id})`);
+  q.svg.append("path").datum(pontos).attr("d", d3.line((p) => x(p.x), (p) => q.y(p.y)))
+    .style("fill", "none").style("stroke", "var(--s-ok)").style("stroke-width", 2.5).style("stroke-linejoin", "round").style("stroke-linecap", "round");
+  eixoX(q, xs, x, rotuloX);
+
+  const max = pontos.reduce((a, b) => (b.y > a.y ? b : a));
+  const min = pontos.reduce((a, b) => (b.y < a.y ? b : a));
+  [[max, -12, "máx."], [min, 22, "mín."]].forEach(([p, dy, nome]) => {
+    q.svg.append("circle").attr("cx", x(p.x)).attr("cy", q.y(p.y)).attr("r", 4.5).style("fill", "var(--laranja)");
+    const texto = q.svg.append("text").attr("class", "rot").attr("x", x(p.x)).attr("y", q.y(p.y) + dy).attr("text-anchor", "middle").text(`${nome} ${graus(p.y)}`);
+    // não deixa o rótulo sair pelas laterais
+    const w = texto.node().getComputedTextLength();
+    const cx = Math.min(Math.max(x(p.x), q.m.l + w / 2), q.W - q.m.r - w / 2);
+    texto.attr("x", cx);
+  });
+
+  const marca = q.svg.append("circle").attr("r", 5).style("fill", "var(--s-ok)").style("stroke", "var(--surface-1)").style("stroke-width", 2).style("display", "none");
+  q.svg.append("rect").attr("x", q.m.l).attr("y", q.m.t).attr("width", q.W - q.m.l - q.m.r).attr("height", q.H - q.m.b - q.m.t).style("fill", "transparent")
+    .on("pointermove", (ev) => {
+      const [sx] = d3.pointer(ev);
+      const p = pontos.reduce((a, b) => (Math.abs(x(b.x) - sx) < Math.abs(x(a.x) - sx) ? b : a));
+      marca.attr("cx", x(p.x)).attr("cy", q.y(p.y)).style("display", null);
+      mostrarTip(ev, graus(p.y), [tituloTip(p)]);
+    })
+    .on("pointerleave", () => { marca.style("display", "none"); esconderTip(); });
+};
+
+// ---------------------------------------------------------------- estação escolhida
+const select = document.querySelector("#sel-estacao");
+d3.groups(comDados, (e) => e.uf).sort((a, b) => a[0].localeCompare(b[0])).forEach(([uf, lista]) => {
+  const og = document.createElement("optgroup");
+  og.label = uf;
+  lista.sort((a, b) => a.nomeBonito.localeCompare(b.nomeBonito, "pt-BR")).forEach((e) => og.append(new Option(`${e.nomeBonito} · ${e.codigo}`, e.codigo)));
+  select.append(og);
+});
+
+const doHash = () => { const c = decodeURIComponent(location.hash.slice(1)).toUpperCase(); return porCodigo.get(c)?.cobertura_media != null ? c : null; };
+let atual = doHash() || "A001";
+
+const escolher = (codigo, rolar = false) => {
+  atual = codigo;
+  history.replaceState(null, "", `#${codigo}`);
+  desenharEstacao();
+  desenharMapa();
+  desenharTabela();
+  if (rolar) document.querySelector(".hero").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+select.addEventListener("change", () => escolher(select.value));
+window.addEventListener("hashchange", () => { const c = doHash(); if (c && c !== atual) escolher(c); });
+
+const amplitude = (linhas) => (linhas ? d3.max(linhas, (r) => +r.temp_media) - d3.min(linhas, (r) => +r.temp_media) : null);
+
+const desenharEstacao = () => {
+  const e = porCodigo.get(atual);
+  select.value = atual;
+  document.querySelector("#c-nome").textContent = e.nomeBonito;
+  document.querySelector("#c-info").textContent = [e.codigo, e.uf, e.altitude != null ? `${fInt.format(e.altitude)} m` : null, `cobertura ${fPct0.format(e.cobertura_media)}`].filter(Boolean).join(" · ");
+  const ad = amplitude(diaPor.get(atual));
+  const aa = amplitude(anoPor.get(atual));
+  document.querySelector("#c-amp-dia").textContent = ad != null ? graus(ad) : "—";
+  document.querySelector("#c-amp-ano").textContent = aa != null ? `no ciclo anual: ${graus(aa)}` : "";
+
+  const dia = (diaPor.get(atual) || []).map((r) => ({ x: +r.hora_utc, y: +r.temp_media }));
+  ciclo(document.querySelector("#g-dia"), dia, d3.range(24),
+    (h) => (h % 3 ? "" : `${String(h).padStart(2, "0")}h`),
+    (p) => `${String(p.x).padStart(2, "0")}h UTC · ${String((p.x + 21) % 24).padStart(2, "0")}h em Brasília`,
+    `Temperatura média por hora em ${e.nomeBonito}`);
+  const ano = (anoPor.get(atual) || []).map((r) => ({ x: +r.mes, y: +r.temp_media }));
+  ciclo(document.querySelector("#g-ano"), ano, d3.range(1, 13), (m) => MESES[m - 1], (p) => MESES[p.x - 1],
+    `Temperatura média por mês em ${e.nomeBonito}`);
+};
+
+// ---------------------------------------------------------------- mapa
+const desenharMapa = () => {
+  const el = document.querySelector("#g-mapa");
+  el.replaceChildren();
+  const pts = comDados.filter((e) => e.lat >= -34 && e.lat <= 6 && e.lon >= -74.5 && e.lon <= -28);
+  const W = Math.max(300, el.clientWidth);
+  const [lon0, lon1] = d3.extent(pts, (p) => p.lon);
+  const [lat0, lat1] = d3.extent(pts, (p) => p.lat);
+  // projeção equirretangular com a longitude encolhida pelo cosseno da latitude média
+  const kx = Math.cos(((lat0 + lat1) / 2) * Math.PI / 180);
+  const larg = (lon1 - lon0) * kx + 2, alt = lat1 - lat0 + 2;
+  const H = Math.round(Math.min(560, W * alt / larg));
+  const k = Math.min(W / larg, H / alt);
+  const ox = (W - larg * k) / 2, oy = (H - alt * k) / 2;
+  const px = (lon) => ox + ((lon - lon0) * kx + 1) * k;
+  const py = (lat) => oy + (lat1 + 1 - lat) * k;
+  const svg = d3.select(el).append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img").attr("aria-label", "Mapa das estações por cobertura");
+  const ordem = [...pts].sort((a, b) => (a.codigo === atual) - (b.codigo === atual));
+  svg.append("g").selectAll("circle").data(ordem).join("circle")
+    .attr("class", "ponto")
+    .attr("cx", (p) => px(p.lon)).attr("cy", (p) => py(p.lat))
+    .attr("r", (p) => (p.codigo === atual ? 8 : 4))
+    .style("fill", (p) => (p.cobertura_media >= 0.8 ? "var(--s-ok)" : "var(--s-falta)"))
+    .style("fill-opacity", (p) => (p.codigo === atual ? 1 : 0.8))
+    .style("stroke", (p) => (p.codigo === atual ? "var(--text-primary)" : "var(--surface-1)"))
+    .style("stroke-width", (p) => (p.codigo === atual ? 2.5 : 0.75))
+    .on("pointermove", (ev, p) => mostrarTip(ev, p.nomeBonito, [`${p.codigo} · ${p.uf}`, `cobertura média ${fPct.format(p.cobertura_media)}`]))
+    .on("pointerleave", esconderTip)
+    .on("click", (ev, p) => escolher(p.codigo, true));
+};
+
+// ---------------------------------------------------------------- cobertura e status
+const cobertura = dados.cobertura.map((r) => ({ ano: +r.ano, estacoes: +r.estacoes, aprovadas: +r.aprovadas, mediana: +r.mediana_cobertura }));
+const ultimoAno = d3.max(cobertura, (r) => r.ano);
+const rotuloAno = (a) => (a === ultimoAno ? `${a}*` : String(a));
+
+const desenharAprovadas = () => {
+  const el = document.querySelector("#g-aprov");
+  const topo = d3.scaleLinear().domain([0, d3.max(cobertura, (r) => r.estacoes)]).nice().domain();
+  const q = quadro(el, 240, topo, (v) => fInt.format(v));
+  q.svg.attr("aria-label", "Estações com dados e aprovadas por ano");
+  const x = d3.scaleBand(cobertura.map((r) => r.ano), [q.m.l, q.W - q.m.r]).padding(0.28);
+  const bw = Math.min(32, x.bandwidth());
+  const cx = (a) => x(a) + x.bandwidth() / 2;
+  cobertura.forEach((r) => {
+    q.svg.append("rect").attr("x", cx(r.ano) - bw / 2).attr("width", bw).attr("y", q.y(r.estacoes)).attr("height", q.y(0) - q.y(r.estacoes)).attr("rx", 3).style("fill", "var(--s-total)");
+    q.svg.append("rect").attr("x", cx(r.ano) - bw / 2).attr("width", bw).attr("y", q.y(r.aprovadas)).attr("height", q.y(0) - q.y(r.aprovadas)).attr("rx", 3).style("fill", "var(--s-ok)");
+  });
+  eixoX(q, cobertura.map((r) => r.ano), cx, rotuloAno);
+  cobertura.forEach((r) => {
+    q.svg.append("rect").attr("x", x(r.ano)).attr("width", x.bandwidth()).attr("y", q.m.t).attr("height", q.y(0) - q.m.t).style("fill", "transparent")
+      .on("pointermove", (ev) => mostrarTip(ev, rotuloAno(r.ano), [
+        `${fInt.format(r.aprovadas)} de ${fInt.format(r.estacoes)} estações aprovadas (${fPct0.format(r.aprovadas / r.estacoes)})`,
+        `mediana de cobertura ${fPct.format(r.mediana)}`,
+      ]))
+      .on("pointerleave", esconderTip);
+  });
+};
+
+const ORDEM = ["ok", "interpolada", "duplicada", "suspeita", "faltante"];
+const NOMES = { ok: "medida", interpolada: "interpolada", duplicada: "duplicada", suspeita: "suspeita", faltante: "faltante" };
+const CORES = { ok: "var(--s-ok)", interpolada: "var(--s-interp)", duplicada: "var(--s-dup)", suspeita: "var(--s-susp)", faltante: "var(--s-falta)" };
+const statusPorAno = d3.rollup(dados.status, (v) => Object.fromEntries(v.map((r) => [r.status, +r.horas])), (r) => +r.ano);
+const anosStatus = [...statusPorAno.keys()].sort((a, b) => a - b);
+
+const desenharStatus = () => {
+  const el = document.querySelector("#g-status");
+  const q = quadro(el, 240, [0, 1], (v) => fPct0.format(v), 4);
+  q.svg.attr("aria-label", "Percentual de horas por status em cada ano");
+  const x = d3.scaleBand(anosStatus, [q.m.l, q.W - q.m.r]).padding(0.28);
+  const bw = Math.min(32, x.bandwidth());
+  const cx = (a) => x(a) + x.bandwidth() / 2;
+  anosStatus.forEach((a) => {
+    const h = statusPorAno.get(a);
+    const total = d3.sum(ORDEM, (s) => h[s] || 0);
+    let acc = 0;
+    const linhas = [];
+    ORDEM.forEach((s) => {
+      const f = (h[s] || 0) / total;
+      q.svg.append("rect").attr("x", cx(a) - bw / 2).attr("width", bw).attr("y", q.y(acc + f)).attr("height", q.y(acc) - q.y(acc + f)).style("fill", CORES[s]);
+      acc += f;
+      linhas.push(`${NOMES[s]}: ${fPct.format(f)}`);
+    });
+    q.svg.append("rect").attr("x", x(a)).attr("width", x.bandwidth()).attr("y", q.m.t).attr("height", q.y(0) - q.m.t).style("fill", "transparent")
+      .on("pointermove", (ev) => mostrarTip(ev, rotuloAno(a), linhas))
+      .on("pointerleave", esconderTip);
+  });
+  eixoX(q, anosStatus, cx, rotuloAno);
+};
+
+// ---------------------------------------------------------------- tabela
+let ordem = { col: "codigo", dir: "ascending" };
+const NUMERICAS = new Set(["anos", "anos_aprovados", "cobertura_media"]);
+const busca = document.querySelector("#busca");
+const corpo = document.querySelector("#corpo");
+
+const desenharTabela = () => {
+  const termo = busca.value.trim().toLowerCase();
+  const valor = (e) => (NUMERICAS.has(ordem.col) ? (e[ordem.col] ?? -1) : String(ordem.col === "nome" ? e.nomeBonito : ordem.col === "avisos" ? e.avisosTexto : e[ordem.col]));
+  const linhas = estacoes
+    .filter((e) => !termo || [e.codigo, e.nomeBonito, e.uf, e.avisosTexto].join(" ").toLowerCase().includes(termo))
+    .sort((a, b) => {
+      const va = valor(a), vb = valor(b);
+      const c = typeof va === "number" ? va - vb : va.localeCompare(vb, "pt-BR");
+      return ordem.dir === "ascending" ? c : -c;
+    });
+  corpo.replaceChildren(...linhas.map((e) => {
+    const tr = document.createElement("tr");
+    tr.dataset.codigo = e.codigo;
+    if (e.codigo === atual) tr.className = "sel";
+    [
+      [e.codigo, ""],
+      [e.nomeBonito, ""],
+      [e.uf, ""],
+      [e.anos != null ? fInt.format(e.anos) : "—", "num estreito-some"],
+      [e.anos_aprovados != null ? fInt.format(e.anos_aprovados) : "—", "num estreito-some"],
+      [e.cobertura_media != null ? fPct.format(e.cobertura_media) : "—", "num"],
+      [e.avisosTexto, "aviso estreito-some"],
+    ].forEach(([t, c]) => { const td = document.createElement("td"); td.textContent = t; if (c) td.className = c; tr.append(td); });
+    return tr;
+  }));
+  document.querySelector("#busca-n").textContent = `${fInt.format(linhas.length)} de ${fInt.format(estacoes.length)} estações`;
+};
+busca.addEventListener("input", desenharTabela);
+corpo.addEventListener("click", (ev) => {
+  const tr = ev.target.closest("tr[data-codigo]");
+  if (tr && porCodigo.get(tr.dataset.codigo).cobertura_media != null) escolher(tr.dataset.codigo, true);
+});
+document.querySelectorAll("th button[data-col]").forEach((b) => b.addEventListener("click", () => {
+  ordem = { col: b.dataset.col, dir: ordem.col === b.dataset.col && ordem.dir === "ascending" ? "descending" : "ascending" };
+  document.querySelectorAll("th").forEach((th) => th.removeAttribute("aria-sort"));
+  b.parentElement.setAttribute("aria-sort", ordem.dir);
+  desenharTabela();
+}));
+
+// ---------------------------------------------------------------- chips do topo
+const horasUsaveis = d3.sum(dados.status.filter((r) => USAVEL.includes(r.status)), (r) => +r.horas);
+const chips = document.querySelector("#chips");
+[
+  [fInt.format(comDados.length), "estações com dados"],
+  [fCompacto.format(horasUsaveis), "horas usáveis"],
+  [`${d3.min(cobertura, (r) => r.ano)}–${ultimoAno}`, "até 30/09/2026"],
+].forEach(([b, t]) => {
+  const s = document.createElement("span");
+  s.className = "chip";
+  const n = document.createElement("b");
+  n.textContent = b;
+  s.append(n, ` ${t}`);
+  chips.append(s);
+});
+
+const tudo = () => { desenharEstacao(); desenharMapa(); desenharAprovadas(); desenharStatus(); };
+tudo();
+desenharTabela();
+let largura = window.innerWidth;
+window.addEventListener("resize", () => {
+  if (window.innerWidth === largura) return;
+  largura = window.innerWidth;
+  clearTimeout(window.__rc);
+  window.__rc = setTimeout(tudo, 150);
+});
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-"""Painel: agrega a silver nos CSVs que o painel do projeto lê.
+"""Painel: agrega a silver nos CSVs que a página do projeto (site/) lê.
 
 Cada arquivo é pequeno o bastante para ser enviado inteiro ao painel
 (o maior, o ciclo diário, tem uma linha por estação e hora do dia).
@@ -52,7 +52,7 @@ CONSULTAS = {
 
 
 def main() -> None:
-    destino = config.DADOS / "painel"
+    destino = config.SITE_DADOS
     destino.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect()
     # Hora e mês saem em UTC, como na silver, e não no fuso da máquina.

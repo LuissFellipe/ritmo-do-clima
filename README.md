@@ -4,7 +4,10 @@ Pipeline de dados que transforma as medições horárias das estações automát
 INMET em tabelas confiáveis e, a partir delas, decompõe o clima de cada estação em
 séries de Fourier: o ciclo do dia, o ciclo do ano e o que foge deles.
 
-**Estado:** M1 (leitura confiável) pronto. Espectro, baseline harmônica, anomalias,
+**Página:** https://luissfellipe.github.io/ritmo-do-clima/
+
+**Estado:** M1 (leitura confiável) pronto, com uma página que mostra a cobertura dos dados
+e o ciclo do dia e do ano de cada estação. Espectro, baseline harmônica, anomalias,
 compressão e painel vêm nos próximos marcos.
 
 ## Como rodar
@@ -14,7 +17,7 @@ Requer [uv](https://docs.astral.sh/uv/).
 ```bash
 make all        # testes, download (2015 em diante), silver e painel
 make silver     # só reprocessa a silver a partir dos ZIPs já baixados
-make painel     # só regera os CSVs do painel a partir da silver
+make painel     # só regera os CSVs da página (site/data) a partir da silver
 ```
 
 A primeira execução baixa cerca de 1,2 GB. As seguintes só baixam os ZIPs cujo
@@ -29,7 +32,7 @@ A primeira execução baixa cerca de 1,2 GB. As seguintes só baixam os ZIPs cuj
 | Silver | `data/silver/cobertura/`, `qualidade/` | Cobertura e avisos por estação-ano |
 | Silver | `data/silver/dim_estacao.parquet` | Estações com coordenadas, altitude e avisos |
 | Controle | `data/silver/execucoes.jsonl` | Uma linha por execução |
-| Painel | `data/painel/*.csv` | Cobertura por ano, horas por status, cadastro e ciclos diário e anual por estação |
+| Página | `site/data/*.csv` | Cobertura por ano, horas por status, cadastro e ciclos diário e anual por estação (versionados) |
 
 O `status` de cada hora se refere à temperatura: `ok`, `interpolada` (lacuna de
 até 3 h), `faltante`, `suspeita` (6 h ou mais com o mesmo valor) ou `duplicada`.

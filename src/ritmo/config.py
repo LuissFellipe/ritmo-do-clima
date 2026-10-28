@@ -15,6 +15,8 @@ RAIZ = Path(__file__).resolve().parents[2]
 DADOS = RAIZ / "data"
 BRONZE = DADOS / "bronze"
 SILVER = DADOS / "silver"
+# CSVs da página pública: versionados, porque o GitHub Pages não roda o pipeline.
+SITE_DADOS = RAIZ / "site" / "data"
 
 # Lacunas de até este tamanho são interpoladas na silver (RF08).
 LACUNA_MAX_INTERPOLADA_H = 3
