@@ -34,10 +34,6 @@ ESQUEMA = {
     "n_horas": pl.Int32,
 }
 
-# O Lomb-Scargle de um ano ocupa por volta de 2 GB por série; com os 16 núcleos
-# em paralelo a RAM e o swap passam de 90% e o systemd-oomd mata o terminal.
-WORKERS = 4
-
 
 def ajustar_senoide(t: np.ndarray, y: np.ndarray, periodo: float) -> tuple[float, float, float]:
     """Amplitude, instante do máximo (horas, módulo o período) e fração da variância explicada."""
@@ -152,7 +148,7 @@ def main(anos=None) -> None:
     anos = anos or sorted(int(p.stem.split("=")[1]) for p in (config.SILVER / "cobertura").glob("ano=*.parquet"))
     inicio = datetime.now(timezone.utc)
     resultados = []
-    with ProcessPoolExecutor(max_workers=WORKERS) as executor:
+    with ProcessPoolExecutor(max_workers=config.WORKERS) as executor:
         for ano in anos:
             t0 = time.perf_counter()
             r = processar_ano(ano, executor)

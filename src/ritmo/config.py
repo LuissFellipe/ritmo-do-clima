@@ -37,6 +37,24 @@ PERIODO_ANO_H = 8766.0
 DIAS_MINIMOS_CICLO_ANUAL = 360
 PICOS_POR_SERIE = 5
 
+# Baseline (RF12–RF13). K_dia e K_ano saem destas listas por validação temporal:
+# o ano de validação escolhe K, e o seguinte, de teste, só mede o resultado.
+K_DIA_CANDIDATOS = (1, 2, 3, 4, 6, 8)
+K_ANO_CANDIDATOS = (1, 2, 3, 4)
+ANO_TESTE_BASELINE = ANO_FINAL - 1  # último ano completo
+# Ganhar menos que isto do melhor par não paga colunas a mais: fica o mais simples.
+TOLERANCIA_K_C = 0.01
+# Com um ano só, a tendência se confunde com o ciclo anual.
+ANOS_MINIMOS_BASELINE = 2
+# Com dois, a diferença entre um ano e outro vira tendência: 25 das 26 estações
+# com mais de 0,2 °C/ano tinham só dois anos aprovados (A449: −0,75 °C/ano).
+ANOS_MINIMOS_TENDENCIA = 3
+
+# Processos por etapa paralela. O Lomb-Scargle de um ano ocupa por volta de 2 GB
+# por série; com os 16 núcleos a RAM e o swap passam de 90% e o systemd-oomd
+# mata o terminal.
+WORKERS = 4
+
 FAIXAS = {
     "temp_c": (-10.0, 50.0),
     "umid_pct": (0.0, 100.0),

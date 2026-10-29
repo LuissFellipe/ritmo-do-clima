@@ -6,8 +6,8 @@ séries de Fourier: o ciclo do dia, o ciclo do ano e o que foge deles.
 
 **Página:** https://luissfellipe.github.io/ritmo-do-clima/
 
-**Estado:** M1 (leitura confiável) pronto, com uma página que mostra a cobertura dos dados
-e o ciclo do dia e do ano de cada estação. Espectro, baseline harmônica, anomalias,
+**Estado:** M1 (leitura confiável), M2 (espectro) e M3 (baseline harmônica) prontos, com uma
+página que mostra a cobertura dos dados e o ciclo do dia e do ano de cada estação. Anomalias,
 compressão e painel vêm nos próximos marcos.
 
 ## Como rodar
@@ -15,13 +15,20 @@ compressão e painel vêm nos próximos marcos.
 Requer [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make all        # testes, download (2015 em diante), silver e painel
+make all        # testes, download (2015 em diante), silver, espectro, baseline e painel
 make silver     # só reprocessa a silver a partir dos ZIPs já baixados
+make espectro   # FFT e Lomb-Scargle por estação e ano
+make baseline   # série de Fourier por estação, escolha de K e teste contra a ingênua
 make painel     # só regera os CSVs da página (site/data) a partir da silver
 ```
 
 A primeira execução baixa cerca de 1,2 GB. As seguintes só baixam os ZIPs cujo
-`ETag` mudou. A silver completa leva cerca de 2 minutos num notebook de 16 GB.
+`ETag` mudou. A silver completa leva cerca de 2 minutos num notebook de 16 GB; o espectro dos 12 anos, cerca de
+30 minutos; a baseline, 2 minutos.
+
+O espectro e a baseline rodam em 4 processos (`WORKERS` em `config.py`). Com um processo por núcleo
+(16), o Lomb-Scargle passava de 16 GB de RAM mais 16 GB de swap, e o `systemd-oomd` matava o terminal
+junto. Com 4, o pico medido foi de 9,1 GB no espectro e 5,9 GB na baseline.
 
 ## Camadas
 
@@ -31,6 +38,10 @@ A primeira execução baixa cerca de 1,2 GB. As seguintes só baixam os ZIPs cuj
 | Silver | `data/silver/medicao_horaria/ano=/uf=/` | Uma linha por estação e hora (UTC): `temp_c`, `umid_pct`, `rad_kj_m2`, `status` |
 | Silver | `data/silver/cobertura/`, `qualidade/` | Cobertura e avisos por estação-ano |
 | Silver | `data/silver/dim_estacao.parquet` | Estações com coordenadas, altitude e avisos |
+| Gold | `data/gold/espectro/ano=` | Amplitude, fase e fração da variância dos ciclos de 24 h e de 1 ano e dos 5 maiores picos, por estação-ano |
+| Gold | `data/gold/coeficientes_fourier/execucao=` | Coeficientes da baseline de cada estação, uma versão por execução |
+| Gold | `data/gold/baseline/ano=` | Real, esperado e resíduo de cada hora |
+| Gold | `data/gold/baseline_validacao.parquet` | Erro de cada K na validação e no teste |
 | Controle | `data/silver/execucoes.jsonl` | Uma linha por execução |
 | Página | `site/data/*.csv` | Cobertura por ano, horas por status, cadastro e ciclos diário e anual por estação (versionados) |
 
@@ -56,6 +67,53 @@ Cada item abaixo apareceu ao rodar o pipeline nos arquivos reais e virou código
   contra 95% a 99% nos outros anos fechados.
 - **User-agent.** O portal derruba conexões com user-agent genérico (`python-httpx`);
   o download se identifica.
+
+## A matemática
+
+**Espectro (M2).** Série sem lacuna vai pela FFT, sem a média e com janela de Hann. Série com
+lacuna vai pelo periodograma de Lomb-Scargle, na mesma grade de frequências. O espectro só localiza
+os picos: amplitude e fase saem de uma senoide ajustada nos pontos válidos. Nos 12 anos, o pico de
+24 h está entre os 3 maiores do espectro em 100% das estações-ano aprovadas (o critério pedia 95%).
+
+**Baseline (M3).** Cada estação ganha uma série de Fourier ajustada por mínimos quadrados em todos
+os seus anos aprovados:
+
+```
+T(t) = c + tendência·t + Σ harmônicos de 24 h (K_dia) + Σ harmônicos de 8.766 h (K_ano)
+         + harmônicos de 24 h × (cos, sen) do ciclo anual
+```
+
+O último termo deixa o ciclo do dia mudar de amplitude e de forma ao longo do ano.
+
+- **Escolha de K.** Os 24 pares de K_dia ∈ {1, 2, 3, 4, 6, 8} e K_ano ∈ {1, 2, 3, 4} são ajustados com
+  os anos até 2023 e medidos em 2024. Fica o par com menos colunas cujo erro mediano está a até
+  0,01 °C do melhor: **K_dia = 4, K_ano = 3** (32 colunas, 1,958 °C contra 1,957 °C do melhor, que
+  tem 44). Sem a tolerância, a primeira rodada escolheu (8, 4), o maior candidato da grade, por milésimos de grau.
+- **Tendência.** Só entra com 3 anos aprovados ou mais. Com dois, a diferença entre um ano e outro
+  virava tendência: 25 das 26 estações com mais de 0,2 °C/ano tinham só dois anos (a A449 saía com
+  −0,75 °C/ano).
+- **Teste em 2025.** O ano de teste não entra na escolha de K: o ajuste usa os anos até 2024.
+- **Versões.** O id da execução é um hash da silver e dos parâmetros: os mesmos dados geram a
+  mesma versão, e duas execuções seguidas gravam arquivos idênticos.
+
+### A baseline perde para a ingênua, e isso é esperado
+
+O critério de aceite do M3 pedia que, no ano de teste, a baseline errasse menos que a baseline
+ingênua (a temperatura da mesma hora do dia anterior). **Ela não erra menos.** Em 2025, nas mesmas
+2,8 milhões de horas de 332 estações:
+
+| | Erro médio absoluto |
+| --- | --- |
+| Baseline de Fourier | 1,90 °C |
+| Ingênua (mesma hora de ontem) | 1,73 °C |
+
+A baseline vence em 18% das estações. As duas medem coisas diferentes. A ingênua copia o tempo de
+ontem: se hoje faz frio porque chegou uma frente fria anteontem, ontem também fez, e ela acerta. A
+baseline descreve o clima esperado para aquela hora daquele dia do ano e não sabe nada do tempo que
+está fazendo.
+
+Para o M4 (anomalias), é a baseline que serve. Uma onda de calor de cinco dias tem resíduo grande
+contra o clima esperado em todos os cinco dias, mas, contra o dia anterior, só aparece no primeiro.
 
 ## Testes de qualidade
 
