@@ -1,8 +1,8 @@
 # O make daqui roda com -j16; as etapas dependem uma da outra.
 .NOTPARALLEL:
-.PHONY: all download silver espectro baseline anomalias painel test clean
+.PHONY: all download silver espectro baseline anomalias compressao painel test clean
 
-all: test download silver espectro baseline anomalias painel
+all: test download silver espectro baseline anomalias compressao painel
 
 download:
 	uv run python -m ritmo.download
@@ -18,6 +18,9 @@ baseline:
 
 anomalias:
 	uv run python -m ritmo.anomalias
+
+compressao:
+	uv run python -m ritmo.compressao
 
 painel:
 	uv run python -m ritmo.painel

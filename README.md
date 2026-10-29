@@ -6,26 +6,27 @@ séries de Fourier: o ciclo do dia, o ciclo do ano e o que foge deles.
 
 **Página:** https://luissfellipe.github.io/ritmo-do-clima/
 
-**Estado:** M1 (leitura confiável), M2 (espectro), M3 (baseline harmônica) e M4 (anomalias) prontos, com uma
-página que mostra a cobertura dos dados e o ciclo do dia e do ano de cada estação. Compressão
-e painel vêm nos próximos marcos.
+**Estado:** M1 (leitura confiável), M2 (espectro), M3 (baseline harmônica), M4 (anomalias) e M5 (compressão)
+prontos, com uma página que mostra a cobertura dos dados e o ciclo do dia e do ano de cada estação. O
+painel com as cinco visões vem no próximo marco.
 
 ## Como rodar
 
 Requer [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make all        # testes, download (2015 em diante), silver, espectro, baseline, anomalias e painel
+make all        # testes, download (2015 em diante), silver, espectro, baseline, anomalias, compressão e painel
 make silver     # só reprocessa a silver a partir dos ZIPs já baixados
 make espectro   # FFT e Lomb-Scargle por estação e ano
 make baseline   # série de Fourier por estação, escolha de K e teste contra a ingênua
 make anomalias  # z robusto do resíduo, eventos e classificação regional × isolado
+make compressao # k maiores coeficientes da FFT por estação-ano, bytes e erro
 make painel     # só regera os CSVs da página (site/data) a partir da silver
 ```
 
 A primeira execução baixa cerca de 1,2 GB. As seguintes só baixam os ZIPs cujo
 `ETag` mudou. A silver completa leva cerca de 2 minutos num notebook de 16 GB; o espectro dos 12 anos, cerca de
-30 minutos; a baseline, 2 minutos; as anomalias, pouco mais de 1 minuto.
+30 minutos; a baseline, 2 minutos; as anomalias, pouco mais de 1 minuto; a compressão, 40 segundos.
 
 O espectro e a baseline rodam em 4 processos (`WORKERS` em `config.py`). Com um processo por núcleo
 (16), o Lomb-Scargle passava de 16 GB de RAM mais 16 GB de swap, e o `systemd-oomd` matava o terminal
@@ -45,8 +46,9 @@ junto. Com 4, o pico medido foi de 9,1 GB no espectro e 5,9 GB na baseline.
 | Gold | `data/gold/baseline_validacao.parquet` | Erro de cada K na validação e no teste |
 | Gold | `data/gold/z_robusto/ano=` | z robusto do resíduo de cada hora |
 | Gold | `data/gold/eventos_anomalia.parquet` | Eventos com início, fim, pico, duração, tipo e quantas vizinhas tinham dado e evento |
+| Gold | `data/gold/compressao/ano=` | Bytes, razão e erro médio e máximo de cada estação-ano e k |
 | Controle | `data/silver/execucoes.jsonl` | Uma linha por execução |
-| Página | `site/data/*.csv` | Cobertura por ano, horas por status, cadastro e ciclos diário e anual por estação (versionados) |
+| Página | `site/data/*.csv` | Cobertura por ano, horas por status, cadastro, ciclos diário e anual por estação e curva de compressão por ano e k (versionados) |
 
 O `status` de cada hora se refere à temperatura: `ok`, `interpolada` (lacuna de
 até 3 h), `faltante`, `suspeita` (6 h ou mais com o mesmo valor) ou `duplicada`.
@@ -153,6 +155,46 @@ o separa de um evento de verdade.
 **A maioria das anomalias é fria e de tarde.** 90% dos eventos têm z negativo, e 70% têm o pico
 entre 16h e 20h UTC (13h e 17h no horário de Brasília). A hipótese é tarde nublada ou chuvosa, em que a
 máxima do dia fica longe da esperada. Ela não foi verificada com dados de precipitação.
+
+### Compressão (M5)
+
+Para cada estação-ano, a série horária vai pela FFT e só os k coeficientes de maior módulo ficam
+guardados: o índice (2 bytes) e as partes real e imaginária em float32 (8 bytes), mais 8 bytes de
+cabeçalho. A série volta pela FFT inversa, e o erro é medido nas horas que tinham dado. As lacunas
+são preenchidas por interpolação linear só para a transformada.
+
+Medianas das 4.330 estações-ano de 2015 a 2025:
+
+| k | bytes | razão | erro médio | erro máximo | estações-ano com erro médio < 0,5 °C |
+|---|---|---|---|---|---|
+| 10 | 108 | 145 | 1,64 °C | 11,1 °C | < 1% |
+| 50 | 508 | 31 | 1,27 °C | 9,3 °C | < 1% |
+| 100 | 1.008 | 16 | 1,09 °C | 8,4 °C | < 1% |
+| 200 | 2.008 | 7,8 | 0,88 °C | 7,3 °C | 2% |
+| 500 | 5.008 | 3,1 | 0,55 °C | 5,7 °C | 29% |
+| **700** | **7.008** | **2,2** | **0,45 °C** | **5,0 °C** | **78%** |
+| 1000 | 10.008 | 1,6 | 0,36 °C | 4,2 °C | 99% |
+| 1500 | 15.008 | 1,0 | 0,27 °C | 2,9 °C | 100% |
+
+A razão compara com o Parquet da coluna de temperatura (15,7 KB de mediana, float64 com zstd, como a
+silver grava). **k = 700 é o menor da grade abaixo de 0,5 °C de erro médio.** O requisito pedia k até
+500, e 700, 1000 e 1500 entraram depois que 500 ficou em 0,55 °C. Em 2026, com 9 meses de dado, k = 500
+já basta.
+
+O resultado tem dois limites:
+
+- **Sem perda sai quase tão barato.** O INMET publica uma casa decimal; a mesma coluna em décimos de
+  grau num Int16 tem 9,4 KB e erro zero nas horas medidas (só as interpoladas pela silver, 0,8% das
+  horas em 2025, perdem até 0,05 °C). A FFT só ganha dela abaixo de k ≈ 940, e a k = 700 economiza
+  um quarto do espaço (7,0 contra 9,4 KB) em troca de 0,45 °C de erro.
+- **O erro máximo é grande.** Mesmo a k = 700, a mediana do pior erro numa hora é de 5 °C. Onde
+  ele cai não foi investigado.
+
+Os eventos longos sobrevivem. A frente fria de julho de 2017 em Florianópolis (A806, 48 h a partir
+de 17/07 às 16h UTC) tem média de 9,5 °C no dado real e 9,5 °C na série comprimida a k = 700, contra
+17,0 °C esperados pela baseline; a mínima passa de 4,9 °C para 5,5 °C.
+
+A pior estação a k = 700 é a A635, com 0,77 °C de erro médio em 2019.
 
 ## Testes de qualidade
 

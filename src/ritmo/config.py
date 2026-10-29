@@ -62,6 +62,11 @@ RAIO_VIZINHANCA_KM = 150
 # simultâneos com esta folga antes do início e depois do fim.
 TOLERANCIA_SIMULTANEO_H = 6
 
+# Compressão (RF18–RF19). O RF18 pedia k até 500, mas com 500 a mediana do erro
+# fica em 0,55 °C; 700, 1000 e 1500 entram para achar o k que passa do alvo.
+K_COMPRESSAO = (10, 25, 50, 100, 200, 500, 700, 1000, 1500)
+ERRO_ALVO_COMPRESSAO_C = 0.5
+
 # Processos por etapa paralela. O Lomb-Scargle de um ano ocupa por volta de 2 GB
 # por série; com os 16 núcleos a RAM e o swap passam de 90% e o systemd-oomd
 # mata o terminal.

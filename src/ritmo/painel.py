@@ -1,4 +1,4 @@
-"""Painel: agrega a silver nos CSVs que a página do projeto (site/) lê.
+"""Painel: agrega a silver e a gold nos CSVs que a página do projeto (site/) lê.
 
 Cada arquivo é pequeno o bastante para ser enviado inteiro ao painel
 (o maior, o ciclo diário, tem uma linha por estação e hora do dia).
@@ -12,6 +12,7 @@ from ritmo.silver import STATUS_USAVEL
 MEDICOES = f"read_parquet('{config.SILVER}/medicao_horaria/**/*.parquet', hive_partitioning=false)"
 COBERTURA = f"read_parquet('{config.SILVER}/cobertura/*.parquet')"
 DIM_ESTACAO = f"read_parquet('{config.SILVER}/dim_estacao.parquet')"
+COMPRESSAO = f"read_parquet('{config.GOLD}/compressao/*.parquet', hive_partitioning=false)"
 USAVEL = "status in (" + ", ".join(f"'{s}'" for s in STATUS_USAVEL) + ")"
 # Média em decimal exato: em double, a soma paralela muda de ordem a cada
 # execução e o arredondamento da segunda casa oscilava entre rodadas.
@@ -47,6 +48,13 @@ CONSULTAS = {
     "ciclo_anual": f"""
         select codigo, month(instante_utc) mes, {MEDIA_TEMP}, count(*) horas
         from {MEDICOES} where {USAVEL} group by all order by codigo, mes
+    """,
+    "curva_compressao": f"""
+        select ano, k, count(*) estacoes, median(bytes)::int bytes,
+               median(bytes_parquet)::int bytes_parquet, median(bytes_parquet_decimos)::int bytes_parquet_decimos,
+               round(median(erro_medio_c), 3) erro_medio_c, round(median(erro_max_c), 2) erro_max_c,
+               round(avg((erro_medio_c < {config.ERRO_ALVO_COMPRESSAO_C})::int), 4) abaixo_do_alvo
+        from {COMPRESSAO} group by all order by ano, k
     """,
 }
 
