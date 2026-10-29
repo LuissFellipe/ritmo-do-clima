@@ -50,6 +50,18 @@ ANOS_MINIMOS_BASELINE = 2
 # com mais de 0,2 °C/ano tinham só dois anos aprovados (A449: −0,75 °C/ano).
 ANOS_MINIMOS_TENDENCIA = 3
 
+# Anomalias (RF15–RF17). O z robusto usa mediana e MAD do resíduo na janela de
+# 30 dias centrada no dia da hora; a janela precisa de metade das horas com dado.
+JANELA_Z_DIAS = 30
+HORAS_MINIMAS_JANELA_Z = 360
+Z_ANOMALIA = 4.0
+# Horas anômalas do mesmo sinal separadas por até isto viram um evento só.
+INTERVALO_MAX_EVENTO_H = 3
+RAIO_VIZINHANCA_KM = 150
+# Uma frente leva horas para cruzar 150 km: eventos das vizinhas contam como
+# simultâneos com esta folga antes do início e depois do fim.
+TOLERANCIA_SIMULTANEO_H = 6
+
 # Processos por etapa paralela. O Lomb-Scargle de um ano ocupa por volta de 2 GB
 # por série; com os 16 núcleos a RAM e o swap passam de 90% e o systemd-oomd
 # mata o terminal.

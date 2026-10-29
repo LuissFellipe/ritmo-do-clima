@@ -6,25 +6,26 @@ séries de Fourier: o ciclo do dia, o ciclo do ano e o que foge deles.
 
 **Página:** https://luissfellipe.github.io/ritmo-do-clima/
 
-**Estado:** M1 (leitura confiável), M2 (espectro) e M3 (baseline harmônica) prontos, com uma
-página que mostra a cobertura dos dados e o ciclo do dia e do ano de cada estação. Anomalias,
-compressão e painel vêm nos próximos marcos.
+**Estado:** M1 (leitura confiável), M2 (espectro), M3 (baseline harmônica) e M4 (anomalias) prontos, com uma
+página que mostra a cobertura dos dados e o ciclo do dia e do ano de cada estação. Compressão
+e painel vêm nos próximos marcos.
 
 ## Como rodar
 
 Requer [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make all        # testes, download (2015 em diante), silver, espectro, baseline e painel
+make all        # testes, download (2015 em diante), silver, espectro, baseline, anomalias e painel
 make silver     # só reprocessa a silver a partir dos ZIPs já baixados
 make espectro   # FFT e Lomb-Scargle por estação e ano
 make baseline   # série de Fourier por estação, escolha de K e teste contra a ingênua
+make anomalias  # z robusto do resíduo, eventos e classificação regional × isolado
 make painel     # só regera os CSVs da página (site/data) a partir da silver
 ```
 
 A primeira execução baixa cerca de 1,2 GB. As seguintes só baixam os ZIPs cujo
 `ETag` mudou. A silver completa leva cerca de 2 minutos num notebook de 16 GB; o espectro dos 12 anos, cerca de
-30 minutos; a baseline, 2 minutos.
+30 minutos; a baseline, 2 minutos; as anomalias, pouco mais de 1 minuto.
 
 O espectro e a baseline rodam em 4 processos (`WORKERS` em `config.py`). Com um processo por núcleo
 (16), o Lomb-Scargle passava de 16 GB de RAM mais 16 GB de swap, e o `systemd-oomd` matava o terminal
@@ -42,6 +43,8 @@ junto. Com 4, o pico medido foi de 9,1 GB no espectro e 5,9 GB na baseline.
 | Gold | `data/gold/coeficientes_fourier/execucao=` | Coeficientes da baseline de cada estação, uma versão por execução |
 | Gold | `data/gold/baseline/ano=` | Real, esperado e resíduo de cada hora |
 | Gold | `data/gold/baseline_validacao.parquet` | Erro de cada K na validação e no teste |
+| Gold | `data/gold/z_robusto/ano=` | z robusto do resíduo de cada hora |
+| Gold | `data/gold/eventos_anomalia.parquet` | Eventos com início, fim, pico, duração, tipo e quantas vizinhas tinham dado e evento |
 | Controle | `data/silver/execucoes.jsonl` | Uma linha por execução |
 | Página | `site/data/*.csv` | Cobertura por ano, horas por status, cadastro e ciclos diário e anual por estação (versionados) |
 
@@ -114,6 +117,42 @@ está fazendo.
 
 Para o M4 (anomalias), é a baseline que serve. Uma onda de calor de cinco dias tem resíduo grande
 contra o clima esperado em todos os cinco dias, mas, contra o dia anterior, só aparece no primeiro.
+
+### Anomalias (M4)
+
+- **z robusto.** É (resíduo − mediana) / (1,4826 · MAD), com mediana e MAD do resíduo na janela de
+  30 dias centrada no dia da hora. O fator 1,4826 faz a MAD de uma normal valer o desvio padrão. A
+  janela anda de dia em dia: as 24 horas de um dia usam a mesma mediana e a mesma MAD, calculadas
+  exatamente. Ele fica numa tabela própria (`z_robusto`), e não na `baseline`, para que uma etapa
+  não reescreva a saída da outra.
+- **Eventos.** Hora com |z| > 4 é anômala. Horas anômalas do mesmo sinal, com até 3 h normais entre
+  elas, formam um evento.
+- **Classificação.** O evento é **regional** quando alguma estação a até 150 km tem evento do mesmo
+  sinal ao mesmo tempo, com 6 h de folga, porque uma frente leva horas para cruzar essa distância.
+  É **isolado** quando as vizinhas tinham dado naquele dia e nenhuma teve evento. Há uma terceira
+  classe, **sem_vizinhas**, para quando nenhuma vizinha tinha dado: 21 estações não têm nenhuma outra
+  a menos de 150 km, e chamar o evento delas de isolado faria uma estação sozinha na Amazônia parecer
+  defeituosa.
+
+São 92.005 eventos em 38,5 milhões de horas com z: 0,65% das horas, contra 0,006% esperados se o
+resíduo fosse normal. 58% são regionais, 31% isolados e 11% sem vizinhas.
+
+**A frente fria de julho de 2017.** Em 19/07/2017, uma massa de ar polar levou Bom Jardim da Serra
+(SC) a −8,8 °C, deixou 58 municípios catarinenses abaixo de zero e baixou Florianópolis de 25 °C no
+domingo, 16, para 2,2 °C
+([Estadão Conteúdo, na IstoÉ Dinheiro](https://istoedinheiro.com.br/com-88oc-cidade-de-sc-registra-menor-temperatura-do-ano-no-pais)).
+O pipeline marca eventos frios regionais em 37 estações do Sul no dia 18 e em 36 no dia 19, nos
+três estados. Florianópolis (A806) tem um evento de 48 h, com z = −6,6. Em Rancho Queimado (A870),
+às 9h UTC do dia 19, fazia −1,7 °C, contra 10,2 °C esperados.
+
+**Um defeito de sensor.** O evento isolado mais extremo é de Bragança (PA), em 17/03/2020: 31,8 °C,
+−9,0 °C, 18,8 °C, 9,8 °C e 31,7 °C em horas seguidas, com z = −39. O −9 °C passa pela silver
+porque fica dentro da faixa física aceita (−10 a 50 °C); é a classificação regional × isolado que
+o separa de um evento de verdade.
+
+**A maioria das anomalias é fria e de tarde.** 90% dos eventos têm z negativo, e 70% têm o pico
+entre 16h e 20h UTC (13h e 17h no horário de Brasília). A hipótese é tarde nublada ou chuvosa, em que a
+máxima do dia fica longe da esperada. Ela não foi verificada com dados de precipitação.
 
 ## Testes de qualidade
 
